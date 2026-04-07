@@ -23,7 +23,7 @@ let TILE = 16,
   cam = { x: 0, y: 0, zoom: CAMERA_MAX_ZOOM },
   playerCount = 2,
   playerSpeed = 5,
-  bombSpeed = 22,
+  bombSpeed = 34,
   timeLeft = 60;
 const keys = {},
   ctrls = [
@@ -99,6 +99,49 @@ function drawPlayer(player, image) {
     drawWidth,
     drawHeight,
   );
+}
+
+function getNearestTargetDirection(fromIndex) {
+  const from = players[fromIndex];
+  if (!from) return { x: 1, y: 0 };
+
+  let nearest = null;
+  let nearestDistSq = Infinity;
+
+  for (let i = 0; i < players.length; i++) {
+    if (i === fromIndex) continue;
+    const target = players[i];
+    if (!target.alive) continue;
+    const dx = target.x - from.x;
+    const dy = target.y - from.y;
+    const distSq = dx * dx + dy * dy;
+    if (distSq < nearestDistSq) {
+      nearestDistSq = distSq;
+      nearest = { dx, dy };
+    }
+  }
+
+  if (!nearest || nearestDistSq === 0) {
+    return { x: from.dirX || 1, y: from.dirY || 0 };
+  }
+
+  const len = Math.hypot(nearest.dx, nearest.dy);
+  return { x: nearest.dx / len, y: nearest.dy / len };
+}
+
+function recallBombToThrower() {
+  if (!bomb || bomb.lastThrower === null) return false;
+  const thrower = players[bomb.lastThrower];
+  if (!thrower || !thrower.alive) return false;
+  bomb.owner = bomb.lastThrower;
+  bomb.vx = 0;
+  bomb.vy = 0;
+  bomb.x = thrower.x;
+  bomb.y = thrower.y;
+  players.forEach((player, index) => {
+    player.hasBomb = index === bomb.owner;
+  });
+  return true;
 }
 ["b2", "b3", "b4"].forEach((id) => {
   const el = document.getElementById(id);
@@ -242,11 +285,10 @@ function update() {
     if (canMoveTo(p.x, nextY)) p.y = nextY;
 
     if (keys[p.ctrl.t] && bomb && bomb.owner === i) {
-      const throwDirX = moveX !== 0 || moveY !== 0 ? moveX : p.dirX;
-      const throwDirY = moveX !== 0 || moveY !== 0 ? moveY : p.dirY;
+      const throwDir = getNearestTargetDirection(i);
       bomb.owner = null;
-      bomb.vx = throwDirX * bombSpeed;
-      bomb.vy = throwDirY * bombSpeed;
+      bomb.vx = throwDir.x * bombSpeed;
+      bomb.vy = throwDir.y * bombSpeed;
       bomb.x = p.x;
       bomb.y = p.y;
       bomb.lastThrower = i;
@@ -296,6 +338,21 @@ function update() {
 
     if (hitY) bomb.vy *= -1;
     else bomb.y = nextBombY;
+
+    const viewWidth = c.width / cam.zoom;
+    const viewHeight = c.height / cam.zoom;
+    const isOutsideScreen =
+      bomb.x + halfBomb < cam.x ||
+      bomb.x - halfBomb > cam.x + viewWidth ||
+      bomb.y + halfBomb < cam.y ||
+      bomb.y - halfBomb > cam.y + viewHeight;
+
+    if (isOutsideScreen) {
+      if (recallBombToThrower()) {
+        cameraFollow();
+        return;
+      }
+    }
 
     for (let i = 0; i < players.length; i++) {
       const p = players[i];
