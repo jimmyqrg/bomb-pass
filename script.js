@@ -19,9 +19,9 @@ let TILE = 16,
   gameState = "menu",
   cam = { x: 0, y: 0, zoom: CAMERA_ZOOM },
   playerCount = 2,
-  playerSpeed = 6,
+  playerSpeed = 5,
   bombSpeed = 9,
-  timeLeft = 10;
+  timeLeft = 60;
 const keys = {},
   ctrls = [
     { u: "w", d: "s", l: "a", r: "d", t: "q" },
