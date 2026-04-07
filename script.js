@@ -1,0 +1,254 @@
+const c = document.getElementById("game"),
+  x = c.getContext("2d");
+c.width = innerWidth;
+c.height = innerHeight;
+const PLAYER_TOUCHBOX_SIZE = 16,
+  PLAYER_SPRITE_HEIGHT = 32;
+let TILE = 16,
+  MAP = 500,
+  map = [],
+  players = [],
+  bomb = null,
+  gameState = "menu",
+  cam = { x: 0, y: 0, zoom: 1 },
+  playerCount = 2,
+  playerSpeed = 6,
+  bombSpeed = 9,
+  timeLeft = 10;
+const keys = {},
+  ctrls = [
+    { u: "w", d: "s", l: "a", r: "d", t: "q" },
+    { u: "ArrowUp", d: "ArrowDown", l: "ArrowLeft", r: "ArrowRight", t: "/" },
+    { u: "i", d: "k", l: "j", r: "l", t: "y" },
+    { u: "t", d: "g", l: "f", r: "h", t: "r" },
+  ],
+  assets = { wall: new Image(), ground: new Image(), bomb: new Image() };
+assets.wall.src = "images/wall.png";
+assets.ground.src = "images/ground-slab.png";
+assets.bomb.src = "images/bomb.png";
+for (let i = 1; i <= 4; i++) {
+  assets["p" + i] = new Image();
+  assets["p" + i].src = "images/player-" + i + ".png";
+  assets["pb" + i] = new Image();
+  assets["pb" + i].src = "images/player-" + i + "-bomb.png";
+}
+window.addEventListener("keydown", (e) => (keys[e.key] = true));
+window.addEventListener("keyup", (e) => (keys[e.key] = false));
+const menu = document.getElementById("menu"),
+  settings = document.getElementById("settings"),
+  startBtn = document.getElementById("startBtn"),
+  backBtn = document.getElementById("backBtn"),
+  timeInput = document.getElementById("timeInput"),
+  timerEl = document.getElementById("timer");
+function swapImg(id, state) {
+  const el = document.getElementById(id);
+  const base = "images/button-" + id[1] + "-players";
+  el.src =
+    state === "lighter"
+      ? base + "-lighter.png"
+      : state === "press"
+        ? base + "-press.png"
+        : base + ".png";
+}
+function getPlayerTouchbox(player) {
+  return {
+    x: player.x - PLAYER_TOUCHBOX_SIZE / 2,
+    y: player.y - PLAYER_TOUCHBOX_SIZE / 2,
+    size: PLAYER_TOUCHBOX_SIZE,
+  };
+}
+function drawPlayer(player, image) {
+  const sourceWidth = image.naturalWidth || image.width || PLAYER_TOUCHBOX_SIZE;
+  const sourceHeight =
+    image.naturalHeight || image.height || PLAYER_SPRITE_HEIGHT;
+  const drawHeight = PLAYER_SPRITE_HEIGHT;
+  const drawWidth = (sourceWidth / sourceHeight) * drawHeight;
+  const touchbox = getPlayerTouchbox(player);
+  x.drawImage(
+    image,
+    touchbox.x + touchbox.size / 2 - drawWidth / 2,
+    touchbox.y + touchbox.size - drawHeight,
+    drawWidth,
+    drawHeight,
+  );
+}
+["b2", "b3", "b4"].forEach((id) => {
+  const el = document.getElementById(id);
+  el.onmouseenter = () => swapImg(id, "lighter");
+  el.onmouseleave = () => swapImg(id, "");
+  el.onmousedown = () => swapImg(id, "press");
+  el.onmouseup = () => swapImg(id, "lighter");
+});
+document.getElementById("b2").onclick = () => {
+  playerCount = 2;
+  showSettings();
+};
+document.getElementById("b3").onclick = () => {
+  playerCount = 3;
+  showSettings();
+};
+document.getElementById("b4").onclick = () => {
+  playerCount = 4;
+  showSettings();
+};
+backBtn.onclick = () => {
+  settings.style.display = "none";
+  menu.style.display = "block";
+};
+function showSettings() {
+  menu.style.display = "none";
+  settings.style.display = "block";
+}
+timeInput.oninput = () => {
+  const v = parseInt(timeInput.value);
+  if (v >= 5 && v <= 60) {
+    startBtn.src = "images/start.png";
+    startBtn.onclick = startGame;
+  } else {
+    startBtn.src = "images/start-gray.png";
+    startBtn.onclick = null;
+  }
+};
+function startGame() {
+  settings.style.display = "none";
+  gameState = "playing";
+  initMap();
+  initPlayers();
+  assignBomb();
+  timeLeft = parseInt(timeInput.value);
+  timerEl.textContent = "Time: " + timeLeft;
+  requestAnimationFrame(loop);
+  countdown();
+}
+function initMap() {
+  map = [];
+  for (let y = 0; y < MAP; y++) {
+    map[y] = [];
+    for (let x = 0; x < MAP; x++) map[y][x] = 0;
+  }
+  for (let x = 0; x < MAP; x++) {
+    map[0][x] = 1;
+    map[MAP - 1][x] = 1;
+  }
+  for (let y = 0; y < MAP; y++) {
+    map[y][0] = 1;
+    map[y][MAP - 1] = 1;
+  }
+  for (let i = 0; i < 600; i++) {
+    const size = 3 + Math.floor(Math.random() * 10);
+    const x0 = 1 + Math.floor(Math.random() * (MAP - size - 1));
+    const y0 = 1 + Math.floor(Math.random() * (MAP - size - 1));
+    for (let y = y0; y < y0 + size; y++)
+      for (let x = x0; x < x0 + size; x++) map[y][x] = 1;
+  }
+}
+function initPlayers() {
+  players = [];
+  const region = { x: Math.floor(MAP / 2), y: Math.floor(MAP / 2) };
+  for (let i = 0; i < playerCount; i++) {
+    let placed = false;
+    while (!placed) {
+      const sx = region.x + Math.floor(Math.random() * 8) - 4,
+        sy = region.y + Math.floor(Math.random() * 8) - 4;
+      if (map[sy] && map[sy][sx] === 0) {
+        players.push({
+          x: sx * TILE,
+          y: sy * TILE,
+          vx: 0,
+          vy: 0,
+          alive: true,
+          ctrl: ctrls[i],
+          hasBomb: false,
+        });
+        placed = true;
+      }
+    }
+  }
+}
+function assignBomb() {
+  const r = Math.floor(Math.random() * players.length);
+  players[r].hasBomb = true;
+  bomb = { x: players[r].x, y: players[r].y, owner: r, vx: 0, vy: 0 };
+}
+function loop() {
+  if (gameState !== "playing") return;
+  requestAnimationFrame(loop);
+  update();
+  render();
+}
+function update() {
+  for (let p of players) {
+    if (!p.alive) continue;
+    const spd = playerSpeed * (p.hasBomb ? 1.6 : 1);
+    if (keys[p.ctrl.u]) p.y -= spd;
+    if (keys[p.ctrl.d]) p.y += spd;
+    if (keys[p.ctrl.l]) p.x -= spd;
+    if (keys[p.ctrl.r]) p.x += spd;
+    if (keys[p.ctrl.t] && bomb.owner === players.indexOf(p)) {
+      bomb.owner = null;
+      bomb.vx = (Math.random() - 0.5) * bombSpeed;
+      bomb.vy = (Math.random() - 0.5) * bombSpeed;
+      bomb.x = p.x;
+      bomb.y = p.y;
+    }
+  }
+  if (bomb && !bomb.owner) {
+    bomb.x += bomb.vx;
+    bomb.y += bomb.vy;
+  }
+  cameraFollow();
+}
+function cameraFollow() {
+  let avgX = 0,
+    avgY = 0,
+    count = 0;
+  for (const p of players)
+    if (p.alive) {
+      avgX += p.x;
+      avgY += p.y;
+      count++;
+    }
+  if (count > 0) {
+    avgX /= count;
+    avgY /= count;
+    cam.x = avgX - c.width / 2;
+    cam.y = avgY - c.height / 2;
+  }
+}
+function render() {
+  x.clearRect(0, 0, c.width, c.height);
+  x.save();
+  x.translate(-cam.x, -cam.y);
+  for (let y = 0; y < MAP; y++)
+    for (let z = 0; z < MAP; z++)
+      x.drawImage(
+        map[y][z] ? assets.wall : assets.ground,
+        z * TILE,
+        y * TILE,
+        TILE,
+        TILE,
+      );
+  for (let i = 0; i < players.length; i++) {
+    const p = players[i];
+    if (p.alive)
+      drawPlayer(p, p.hasBomb ? assets["pb" + (i + 1)] : assets["p" + (i + 1)]);
+  }
+  if (bomb && !bomb.owner)
+    x.drawImage(assets.bomb, bomb.x - 8, bomb.y - 8, 16, 16);
+  x.restore();
+}
+function countdown() {
+  const t = setInterval(() => {
+    if (gameState !== "playing") {
+      clearInterval(t);
+      return;
+    }
+    timeLeft--;
+    timerEl.textContent = "Time: " + timeLeft;
+    if (timeLeft <= 0) {
+      clearInterval(t);
+      gameState = "menu";
+      menu.style.display = "block";
+    }
+  }, 1000);
+}
