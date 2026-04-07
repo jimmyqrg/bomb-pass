@@ -2,8 +2,13 @@ const c = document.getElementById("game"),
   x = c.getContext("2d");
 c.width = innerWidth;
 c.height = innerHeight;
+window.addEventListener("resize", () => {
+  c.width = innerWidth;
+  c.height = innerHeight;
+});
 const PLAYER_TOUCHBOX_SIZE = 16,
-  PLAYER_SPRITE_HEIGHT = 32;
+  PLAYER_SPRITE_WIDTH = 24,
+  PLAYER_SPRITE_FALLBACK_HEIGHT = 32;
 let TILE = 16,
   MAP = 500,
   map = [],
@@ -57,12 +62,30 @@ function getPlayerTouchbox(player) {
     size: PLAYER_TOUCHBOX_SIZE,
   };
 }
+
+function isSolidAtPixel(px, py) {
+  const tx = Math.floor(px / TILE);
+  const ty = Math.floor(py / TILE);
+  if (ty < 0 || ty >= MAP || tx < 0 || tx >= MAP) return true;
+  return map[ty][tx] === 1;
+}
+
+function canMoveTo(nx, ny) {
+  const half = PLAYER_TOUCHBOX_SIZE / 2;
+  return (
+    !isSolidAtPixel(nx - half, ny - half) &&
+    !isSolidAtPixel(nx + half, ny - half) &&
+    !isSolidAtPixel(nx - half, ny + half) &&
+    !isSolidAtPixel(nx + half, ny + half)
+  );
+}
+
 function drawPlayer(player, image) {
   const sourceWidth = image.naturalWidth || image.width || PLAYER_TOUCHBOX_SIZE;
   const sourceHeight =
-    image.naturalHeight || image.height || PLAYER_SPRITE_HEIGHT;
-  const drawHeight = PLAYER_SPRITE_HEIGHT;
-  const drawWidth = (sourceWidth / sourceHeight) * drawHeight;
+    image.naturalHeight || image.height || PLAYER_SPRITE_FALLBACK_HEIGHT;
+  const drawWidth = PLAYER_SPRITE_WIDTH;
+  const drawHeight = (sourceHeight / sourceWidth) * drawWidth;
   const touchbox = getPlayerTouchbox(player);
   x.drawImage(
     image,
@@ -109,6 +132,8 @@ timeInput.oninput = () => {
     startBtn.onclick = null;
   }
 };
+timeInput.oninput();
+
 function startGame() {
   settings.style.display = "none";
   gameState = "playing";
@@ -177,25 +202,90 @@ function loop() {
   render();
 }
 function update() {
-  for (let p of players) {
+  for (let i = 0; i < players.length; i++) {
+    const p = players[i];
     if (!p.alive) continue;
     const spd = playerSpeed * (p.hasBomb ? 1.6 : 1);
-    if (keys[p.ctrl.u]) p.y -= spd;
-    if (keys[p.ctrl.d]) p.y += spd;
-    if (keys[p.ctrl.l]) p.x -= spd;
-    if (keys[p.ctrl.r]) p.x += spd;
-    if (keys[p.ctrl.t] && bomb.owner === players.indexOf(p)) {
+
+    let nextX = p.x;
+    let nextY = p.y;
+    if (keys[p.ctrl.u]) nextY -= spd;
+    if (keys[p.ctrl.d]) nextY += spd;
+    if (keys[p.ctrl.l]) nextX -= spd;
+    if (keys[p.ctrl.r]) nextX += spd;
+
+    if (canMoveTo(nextX, p.y)) p.x = nextX;
+    if (canMoveTo(p.x, nextY)) p.y = nextY;
+
+    if (keys[p.ctrl.t] && bomb && bomb.owner === i) {
       bomb.owner = null;
       bomb.vx = (Math.random() - 0.5) * bombSpeed;
       bomb.vy = (Math.random() - 0.5) * bombSpeed;
       bomb.x = p.x;
       bomb.y = p.y;
+      p.hasBomb = false;
     }
   }
-  if (bomb && !bomb.owner) {
-    bomb.x += bomb.vx;
-    bomb.y += bomb.vy;
+
+  if (!bomb) {
+    cameraFollow();
+    return;
   }
+
+  if (bomb.owner !== null) {
+    const owner = players[bomb.owner];
+    if (owner && owner.alive) {
+      bomb.x = owner.x;
+      bomb.y = owner.y;
+      players.forEach((player, index) => {
+        player.hasBomb = index === bomb.owner;
+      });
+    } else {
+      bomb.owner = null;
+      bomb.vx = (Math.random() - 0.5) * bombSpeed;
+      bomb.vy = (Math.random() - 0.5) * bombSpeed;
+    }
+  } else {
+    const halfBomb = 8;
+    const nextBombX = bomb.x + bomb.vx;
+    const nextBombY = bomb.y + bomb.vy;
+
+    const hitX =
+      isSolidAtPixel(nextBombX - halfBomb, bomb.y - halfBomb) ||
+      isSolidAtPixel(nextBombX + halfBomb, bomb.y - halfBomb) ||
+      isSolidAtPixel(nextBombX - halfBomb, bomb.y + halfBomb) ||
+      isSolidAtPixel(nextBombX + halfBomb, bomb.y + halfBomb);
+    const hitY =
+      isSolidAtPixel(bomb.x - halfBomb, nextBombY - halfBomb) ||
+      isSolidAtPixel(bomb.x + halfBomb, nextBombY - halfBomb) ||
+      isSolidAtPixel(bomb.x - halfBomb, nextBombY + halfBomb) ||
+      isSolidAtPixel(bomb.x + halfBomb, nextBombY + halfBomb);
+
+    if (hitX) bomb.vx *= -1;
+    else bomb.x = nextBombX;
+
+    if (hitY) bomb.vy *= -1;
+    else bomb.y = nextBombY;
+
+    for (let i = 0; i < players.length; i++) {
+      const p = players[i];
+      if (!p.alive) continue;
+      const dx = p.x - bomb.x;
+      const dy = p.y - bomb.y;
+      const distSq = dx * dx + dy * dy;
+      const pickupDist = PLAYER_TOUCHBOX_SIZE;
+      if (distSq <= pickupDist * pickupDist) {
+        bomb.owner = i;
+        bomb.vx = 0;
+        bomb.vy = 0;
+        players.forEach((player, index) => {
+          player.hasBomb = index === i;
+        });
+        break;
+      }
+    }
+  }
+
   cameraFollow();
 }
 function cameraFollow() {
@@ -219,8 +309,13 @@ function render() {
   x.clearRect(0, 0, c.width, c.height);
   x.save();
   x.translate(-cam.x, -cam.y);
-  for (let y = 0; y < MAP; y++)
-    for (let z = 0; z < MAP; z++)
+  const startY = Math.max(0, Math.floor(cam.y / TILE) - 1);
+  const endY = Math.min(MAP - 1, Math.ceil((cam.y + c.height) / TILE) + 1);
+  const startX = Math.max(0, Math.floor(cam.x / TILE) - 1);
+  const endX = Math.min(MAP - 1, Math.ceil((cam.x + c.width) / TILE) + 1);
+
+  for (let y = startY; y <= endY; y++)
+    for (let z = startX; z <= endX; z++)
       x.drawImage(
         map[y][z] ? assets.wall : assets.ground,
         z * TILE,
@@ -233,7 +328,7 @@ function render() {
     if (p.alive)
       drawPlayer(p, p.hasBomb ? assets["pb" + (i + 1)] : assets["p" + (i + 1)]);
   }
-  if (bomb && !bomb.owner)
+  if (bomb && bomb.owner === null)
     x.drawImage(assets.bomb, bomb.x - 8, bomb.y - 8, 16, 16);
   x.restore();
 }
