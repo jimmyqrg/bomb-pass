@@ -207,12 +207,30 @@ function initMap() {
     map[y][0] = 1;
     map[y][MAP - 1] = 1;
   }
-  for (let i = 0; i < 600; i++) {
-    const size = 3 + Math.floor(Math.random() * 10);
-    const x0 = 1 + Math.floor(Math.random() * (MAP - size - 1));
-    const y0 = 1 + Math.floor(Math.random() * (MAP - size - 1));
-    for (let y = y0; y < y0 + size; y++)
+  const clusterSeeds = [];
+  const clusterCount = 700;
+  for (let i = 0; i < clusterCount; i++) {
+    const size = 2 + Math.floor(Math.random() * 6);
+    let x0;
+    let y0;
+
+    if (clusterSeeds.length > 0 && Math.random() < 0.8) {
+      const seed = clusterSeeds[Math.floor(Math.random() * clusterSeeds.length)];
+      const spread = 10;
+      x0 = seed.x + Math.floor((Math.random() * 2 - 1) * spread);
+      y0 = seed.y + Math.floor((Math.random() * 2 - 1) * spread);
+      x0 = Math.max(1, Math.min(MAP - size - 1, x0));
+      y0 = Math.max(1, Math.min(MAP - size - 1, y0));
+    } else {
+      x0 = 1 + Math.floor(Math.random() * (MAP - size - 1));
+      y0 = 1 + Math.floor(Math.random() * (MAP - size - 1));
+      clusterSeeds.push({ x: x0, y: y0 });
+      if (clusterSeeds.length > 50) clusterSeeds.shift();
+    }
+
+    for (let y = y0; y < y0 + size; y++) {
       for (let x = x0; x < x0 + size; x++) map[y][x] = 1;
+    }
   }
 }
 function initPlayers() {
