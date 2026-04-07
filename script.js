@@ -8,7 +8,8 @@ window.addEventListener("resize", () => {
 });
 const PLAYER_TOUCHBOX_SIZE = 16,
   PLAYER_SPRITE_WIDTH = 24,
-  PLAYER_SPRITE_FALLBACK_HEIGHT = 32;
+  PLAYER_SPRITE_FALLBACK_HEIGHT = 32,
+  BOMB_SELF_PICKUP_COOLDOWN_MS = 250;
 let TILE = 16,
   MAP = 500,
   map = [],
@@ -193,7 +194,15 @@ function initPlayers() {
 function assignBomb() {
   const r = Math.floor(Math.random() * players.length);
   players[r].hasBomb = true;
-  bomb = { x: players[r].x, y: players[r].y, owner: r, vx: 0, vy: 0 };
+  bomb = {
+    x: players[r].x,
+    y: players[r].y,
+    owner: r,
+    vx: 0,
+    vy: 0,
+    lastThrower: null,
+    noPickupUntil: 0,
+  };
 }
 function loop() {
   if (gameState !== "playing") return;
@@ -223,6 +232,8 @@ function update() {
       bomb.vy = (Math.random() - 0.5) * bombSpeed;
       bomb.x = p.x;
       bomb.y = p.y;
+      bomb.lastThrower = i;
+      bomb.noPickupUntil = performance.now() + BOMB_SELF_PICKUP_COOLDOWN_MS;
       p.hasBomb = false;
     }
   }
@@ -237,6 +248,8 @@ function update() {
     if (owner && owner.alive) {
       bomb.x = owner.x;
       bomb.y = owner.y;
+      bomb.lastThrower = null;
+      bomb.noPickupUntil = 0;
       players.forEach((player, index) => {
         player.hasBomb = index === bomb.owner;
       });
@@ -270,6 +283,12 @@ function update() {
     for (let i = 0; i < players.length; i++) {
       const p = players[i];
       if (!p.alive) continue;
+      if (
+        i === bomb.lastThrower &&
+        performance.now() < bomb.noPickupUntil
+      ) {
+        continue;
+      }
       const dx = p.x - bomb.x;
       const dy = p.y - bomb.y;
       const distSq = dx * dx + dy * dy;
