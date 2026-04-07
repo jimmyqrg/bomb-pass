@@ -10,17 +10,20 @@ const PLAYER_TOUCHBOX_SIZE = 16,
   PLAYER_SPRITE_WIDTH = 24,
   PLAYER_SPRITE_FALLBACK_HEIGHT = 32,
   BOMB_SELF_PICKUP_COOLDOWN_MS = 250,
-  CAMERA_ZOOM = 2.2;
+  CAMERA_MIN_ZOOM = 1,
+  CAMERA_MAX_ZOOM = 2.2,
+  CAMERA_PADDING = 120,
+  CAMERA_ZOOM_LERP = 0.12;
 let TILE = 16,
   MAP = 500,
   map = [],
   players = [],
   bomb = null,
   gameState = "menu",
-  cam = { x: 0, y: 0, zoom: CAMERA_ZOOM },
+  cam = { x: 0, y: 0, zoom: CAMERA_MAX_ZOOM },
   playerCount = 2,
   playerSpeed = 5,
-  bombSpeed = 9,
+  bombSpeed = 22,
   timeLeft = 60;
 const keys = {},
   ctrls = [
@@ -183,6 +186,8 @@ function initPlayers() {
           y: sy * TILE,
           vx: 0,
           vy: 0,
+          dirX: 1,
+          dirY: 0,
           alive: true,
           ctrl: ctrls[i],
           hasBomb: false,
@@ -217,20 +222,31 @@ function update() {
     if (!p.alive) continue;
     const spd = playerSpeed * (p.hasBomb ? 1.6 : 1);
 
-    let nextX = p.x;
-    let nextY = p.y;
-    if (keys[p.ctrl.u]) nextY -= spd;
-    if (keys[p.ctrl.d]) nextY += spd;
-    if (keys[p.ctrl.l]) nextX -= spd;
-    if (keys[p.ctrl.r]) nextX += spd;
+    const inputX = (keys[p.ctrl.r] ? 1 : 0) - (keys[p.ctrl.l] ? 1 : 0);
+    const inputY = (keys[p.ctrl.d] ? 1 : 0) - (keys[p.ctrl.u] ? 1 : 0);
+
+    let moveX = inputX;
+    let moveY = inputY;
+    if (moveX !== 0 || moveY !== 0) {
+      const len = Math.hypot(moveX, moveY);
+      moveX /= len;
+      moveY /= len;
+      p.dirX = moveX;
+      p.dirY = moveY;
+    }
+
+    const nextX = p.x + moveX * spd;
+    const nextY = p.y + moveY * spd;
 
     if (canMoveTo(nextX, p.y)) p.x = nextX;
     if (canMoveTo(p.x, nextY)) p.y = nextY;
 
     if (keys[p.ctrl.t] && bomb && bomb.owner === i) {
+      const throwDirX = moveX !== 0 || moveY !== 0 ? moveX : p.dirX;
+      const throwDirY = moveX !== 0 || moveY !== 0 ? moveY : p.dirY;
       bomb.owner = null;
-      bomb.vx = (Math.random() - 0.5) * bombSpeed;
-      bomb.vy = (Math.random() - 0.5) * bombSpeed;
+      bomb.vx = throwDirX * bombSpeed;
+      bomb.vy = throwDirY * bombSpeed;
       bomb.x = p.x;
       bomb.y = p.y;
       bomb.lastThrower = i;
@@ -309,21 +325,35 @@ function update() {
   cameraFollow();
 }
 function cameraFollow() {
-  let avgX = 0,
-    avgY = 0,
-    count = 0;
-  for (const p of players)
-    if (p.alive) {
-      avgX += p.x;
-      avgY += p.y;
-      count++;
-    }
-  if (count > 0) {
-    avgX /= count;
-    avgY /= count;
-    cam.x = avgX - c.width / (2 * cam.zoom);
-    cam.y = avgY - c.height / (2 * cam.zoom);
+  const alive = players.filter((p) => p.alive);
+  if (alive.length === 0) return;
+
+  let minX = Infinity,
+    maxX = -Infinity,
+    minY = Infinity,
+    maxY = -Infinity;
+  for (const p of alive) {
+    if (p.x < minX) minX = p.x;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.y > maxY) maxY = p.y;
   }
+
+  const spreadX = maxX - minX + CAMERA_PADDING * 2;
+  const spreadY = maxY - minY + CAMERA_PADDING * 2;
+  const zoomX = c.width / Math.max(spreadX, 1);
+  const zoomY = c.height / Math.max(spreadY, 1);
+  const targetZoom = Math.max(
+    CAMERA_MIN_ZOOM,
+    Math.min(CAMERA_MAX_ZOOM, Math.min(zoomX, zoomY)),
+  );
+
+  cam.zoom += (targetZoom - cam.zoom) * CAMERA_ZOOM_LERP;
+
+  const centerX = (minX + maxX) / 2;
+  const centerY = (minY + maxY) / 2;
+  cam.x = centerX - c.width / (2 * cam.zoom);
+  cam.y = centerY - c.height / (2 * cam.zoom);
 }
 function render() {
   x.clearRect(0, 0, c.width, c.height);
