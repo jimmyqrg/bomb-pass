@@ -9,14 +9,15 @@ window.addEventListener("resize", () => {
 const PLAYER_TOUCHBOX_SIZE = 16,
   PLAYER_SPRITE_WIDTH = 24,
   PLAYER_SPRITE_FALLBACK_HEIGHT = 32,
-  BOMB_SELF_PICKUP_COOLDOWN_MS = 250;
+  BOMB_SELF_PICKUP_COOLDOWN_MS = 250,
+  CAMERA_ZOOM = 2.2;
 let TILE = 16,
   MAP = 500,
   map = [],
   players = [],
   bomb = null,
   gameState = "menu",
-  cam = { x: 0, y: 0, zoom: 1 },
+  cam = { x: 0, y: 0, zoom: CAMERA_ZOOM },
   playerCount = 2,
   playerSpeed = 6,
   bombSpeed = 9,
@@ -125,7 +126,7 @@ function showSettings() {
 }
 timeInput.oninput = () => {
   const v = parseInt(timeInput.value);
-  if (v >= 5 && v <= 60) {
+  if (v >= 5 && v <= 300) {
     startBtn.src = "images/start.png";
     startBtn.onclick = startGame;
   } else {
@@ -320,18 +321,21 @@ function cameraFollow() {
   if (count > 0) {
     avgX /= count;
     avgY /= count;
-    cam.x = avgX - c.width / 2;
-    cam.y = avgY - c.height / 2;
+    cam.x = avgX - c.width / (2 * cam.zoom);
+    cam.y = avgY - c.height / (2 * cam.zoom);
   }
 }
 function render() {
   x.clearRect(0, 0, c.width, c.height);
   x.save();
+  x.scale(cam.zoom, cam.zoom);
   x.translate(-cam.x, -cam.y);
+  const viewWidth = c.width / cam.zoom;
+  const viewHeight = c.height / cam.zoom;
   const startY = Math.max(0, Math.floor(cam.y / TILE) - 1);
-  const endY = Math.min(MAP - 1, Math.ceil((cam.y + c.height) / TILE) + 1);
+  const endY = Math.min(MAP - 1, Math.ceil((cam.y + viewHeight) / TILE) + 1);
   const startX = Math.max(0, Math.floor(cam.x / TILE) - 1);
-  const endX = Math.min(MAP - 1, Math.ceil((cam.x + c.width) / TILE) + 1);
+  const endX = Math.min(MAP - 1, Math.ceil((cam.x + viewWidth) / TILE) + 1);
 
   for (let y = startY; y <= endY; y++)
     for (let z = startX; z <= endX; z++)
