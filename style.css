@@ -49,6 +49,11 @@ img.btn{
   z-index:11;
 }
 
+#winner{
+  margin-top:12px;
+  color:#ffe66d;
+}
+
 #settings{
   display:none;
   background:url("images/background-2.png") center/cover no-repeat;

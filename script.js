@@ -49,7 +49,8 @@ const menu = document.getElementById("menu"),
   startBtn = document.getElementById("startBtn"),
   backBtn = document.getElementById("backBtn"),
   timeInput = document.getElementById("timeInput"),
-  timerEl = document.getElementById("timer");
+  timerEl = document.getElementById("timer"),
+  winnerEl = document.getElementById("winner");
 function swapImg(id, state) {
   const el = document.getElementById(id);
   const base = "images/button-" + id[1] + "-players";
@@ -185,6 +186,7 @@ timeInput.oninput();
 function startGame() {
   settings.style.display = "none";
   gameState = "playing";
+  winnerEl.textContent = "";
   initMap();
   initPlayers();
   assignBomb();
@@ -192,6 +194,46 @@ function startGame() {
   timerEl.textContent = "Time: " + timeLeft;
   requestAnimationFrame(loop);
   countdown();
+}
+
+function getLoserIndexAtTimeout() {
+  if (!bomb) return -1;
+  if (bomb.owner !== null) return bomb.owner;
+
+  let nearest = -1;
+  let nearestDistSq = Infinity;
+  for (let i = 0; i < players.length; i++) {
+    const p = players[i];
+    if (!p.alive) continue;
+    const dx = p.x - bomb.x;
+    const dy = p.y - bomb.y;
+    const distSq = dx * dx + dy * dy;
+    if (distSq < nearestDistSq) {
+      nearest = i;
+      nearestDistSq = distSq;
+    }
+  }
+  return nearest;
+}
+
+function showWinner() {
+  const loser = getLoserIndexAtTimeout();
+  const winners = [];
+  for (let i = 0; i < players.length; i++) {
+    if (players[i].alive && i !== loser) winners.push(i + 1);
+  }
+
+  if (winners.length === 0) {
+    winnerEl.textContent = "No winner this round";
+    return;
+  }
+
+  if (winners.length === 1) {
+    winnerEl.textContent = "Winner: Player " + winners[0];
+    return;
+  }
+
+  winnerEl.textContent = "Winners: " + winners.map((n) => "P" + n).join(", ");
 }
 function initMap() {
   map = [];
@@ -470,6 +512,7 @@ function countdown() {
     timerEl.textContent = "Time: " + timeLeft;
     if (timeLeft <= 0) {
       clearInterval(t);
+      showWinner();
       gameState = "menu";
       menu.style.display = "block";
     }
