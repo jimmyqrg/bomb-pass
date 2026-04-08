@@ -115,13 +115,14 @@ img.btn{
   width:min(34vw,280px);
 }
 
+
 #startBtn{
-  top:200px;
+  top:270px;
   left:50%;
 }
 
 #backBtn{
-  top:260px;
+  top:340px;
   left:50%;
 }
 
