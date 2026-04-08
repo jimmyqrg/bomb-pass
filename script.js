@@ -29,8 +29,8 @@ const keys = {},
   ctrls = [
     { u: "w", d: "s", l: "a", r: "d", t: "q" },
     { u: "ArrowUp", d: "ArrowDown", l: "ArrowLeft", r: "ArrowRight", t: "/" },
-    { u: "i", d: "k", l: "j", r: "l", t: "y" },
-    { u: "t", d: "g", l: "f", r: "h", t: "r" },
+    { u: "i", d: "k", l: "j", r: "l", t: "y" }, // Player 3 throw: Y
+    { u: "t", d: "g", l: "f", r: "h", t: "r" }, // Player 4 throw: R
   ],
   assets = { wall: new Image(), ground: new Image(), bomb: new Image() };
 assets.wall.src = "images/wall.png";
@@ -345,7 +345,31 @@ function update() {
     if (canMoveTo(p.x, nextY)) p.y = nextY;
 
     if (keys[p.ctrl.t] && bomb && bomb.owner === i) {
-      const throwDir = getNearestTargetDirection(i);
+      // Find the closest player to throw to
+      let minDist = Infinity;
+      let targetIndex = -1;
+      for (let j = 0; j < players.length; j++) {
+        if (j === i) continue;
+        const target = players[j];
+        if (!target.alive) continue;
+        const dx = target.x - p.x;
+        const dy = target.y - p.y;
+        const dist = dx * dx + dy * dy;
+        if (dist < minDist) {
+          minDist = dist;
+          targetIndex = j;
+        }
+      }
+      let throwDir = { x: p.dirX || 1, y: p.dirY || 0 };
+      if (targetIndex !== -1) {
+        const target = players[targetIndex];
+        const dx = target.x - p.x;
+        const dy = target.y - p.y;
+        const len = Math.hypot(dx, dy);
+        if (len > 0) {
+          throwDir = { x: dx / len, y: dy / len };
+        }
+      }
       bomb.owner = null;
       bomb.vx = throwDir.x * bombSpeed;
       bomb.vy = throwDir.y * bombSpeed;
