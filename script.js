@@ -29,7 +29,7 @@ const keys = {},
   ctrls = [
     { u: "w", d: "s", l: "a", r: "d", t: "q" },
     { u: "ArrowUp", d: "ArrowDown", l: "ArrowLeft", r: "ArrowRight", t: "/" },
-    { u: "i", d: "k", l: "j", r: "l", t: "y" }, // Player 3 throw: Y
+    { u: "i", d: "k", l: "j", r: "l", t: "u" }, // Player 3 throw: U
     { u: "t", d: "g", l: "f", r: "h", t: "r" }, // Player 4 throw: R
   ],
   assets = { wall: new Image(), ground: new Image(), bomb: new Image() };
